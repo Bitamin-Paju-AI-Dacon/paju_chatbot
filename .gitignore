@@ -9,6 +9,3 @@ paju_model_resnet18_finetuned.pth
 *.sqlite3
 chroma.sqlite3
 
-# OS
-Thumbs.db
-.DS_Store
