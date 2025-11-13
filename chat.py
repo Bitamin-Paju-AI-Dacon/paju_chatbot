@@ -1,14 +1,13 @@
-import os, json
-import torch
+import os, json, mimetypes, torch
 from torchvision import models, transforms
-from PIL import Image
+from PIL import Image, UnidentifiedImageError
 from openai import AzureOpenAI
 from dotenv import load_dotenv
-from retriever import retrieve_event_info  
-
+from retriever import retrieve_event_info
 
 load_dotenv()
 
+# GPT 키 불러오기
 client = AzureOpenAI(
     api_key=os.getenv("AZURE_OPENAI_KEY"),
     azure_endpoint=os.getenv("AZURE_OPENAI_ENDPOINT"),
@@ -23,164 +22,172 @@ num_classes = cfg["num_classes"]
 model_path = cfg["model_path"]
 class_names = cfg["class_names"]
 
+
 model = models.resnet18(weights=models.ResNet18_Weights.DEFAULT)
 model.fc = torch.nn.Linear(model.fc.in_features, num_classes)
-model.load_state_dict(torch.load(model_path, map_location='cpu'))
+
+
+model.load_state_dict(torch.load("paju_model_resnet18_finetuned.pth", map_location='cpu'))
+model.to('cpu')
 model.eval()
 
-# 정규화
+mean = [0.485, 0.456, 0.406]
+std  = [0.229, 0.224, 0.225]
+
 transform = transforms.Compose([
-    transforms.Resize((224, 224)),
+    transforms.Resize((224,224)),
     transforms.ToTensor(),
-    transforms.Normalize(mean=[0.485, 0.456, 0.406],
-                         std=[0.229, 0.224, 0.225]),
+    transforms.Normalize(mean, std)
 ])
 
-def predict_place(image_path):
-    """이미지 → 장소 예측"""
-    img = Image.open(image_path).convert("RGB")
-    input_tensor = transform(img).unsqueeze(0)
-    with torch.no_grad():
-        outputs = model(input_tensor)
-        pred_idx = outputs.argmax(dim=1).item()
-    return class_names[pred_idx]
+SYSTEM_PROMPT = (
+    "너는 파주 출판단지를 안내하는 전문 챗봇이야. "
+    "구어체나 감탄사 없이, 안내문 형식의 문어체로 작성해."
+)
+
+# 사용자별 대화 히스토리/스탬프 저장소
+conversation_sessions = {}
+user_stamps = {} 
 
 # GPT 대화 기능
-conversation_history = [
-    {"role": "system", "content": "너는 파주 출판단지를 안내하는 전문 챗봇이야. 구어체나 감탄사 없이, 안내문 형식의 문어체로 작성해"}
-]
+def ask_gpt(user_prompt: str, session_id: str):
+    if session_id not in conversation_sessions:
+        conversation_sessions[session_id] = [{"role": "system", "content": SYSTEM_PROMPT}]
 
-def ask_gpt(prompt):
-    conversation_history.append({"role": "user", "content": prompt})
-    response = client.chat.completions.create(
+    conversation_sessions[session_id].append({"role": "user", "content": user_prompt})
+
+    res = client.chat.completions.create(
         model=os.getenv("AZURE_OPENAI_DEPLOYMENT"),
-        messages=conversation_history
+        messages=conversation_sessions[session_id]
     )
-    answer = response.choices[0].message.content
-    conversation_history.append({"role": "assistant", "content": answer})
+
+    answer = res.choices[0].message.content
+    conversation_sessions[session_id].append({"role": "assistant", "content": answer})
     return answer
 
 
-# 텍스트 모드 (행사 RAG 연동)
-def text_mode():
-    while True:
-        user_input = input("사용자: ").strip()
-        if user_input.lower() == "quit":
-            print("챗봇: 이용해 주셔서 감사합니다.")
-            break
 
-        # '행사' 또는 '이벤트' 키워드가 들어가면 RAG 검색
-        if any(keyword in user_input for keyword in ["행사", "이벤트"]):
-            results = retrieve_event_info(user_input, top_k=2)
-            if results:
-                context = "\n\n".join([r.page_content for r in results])
-                prompt = f"""
-                사용자가 '{user_input}'라고 물었어.
-                아래는 관련된 행사 정보야:
-                {context}
+IMG_EXTS = {".jpg", ".jpeg", ".png"}
 
-                위 내용을 참고하여 사용자의 질문에 구체적이고 자연스럽게 답변해.
-                제목, 일시, 장소, 호스트, 핵심 요약, 신청방법 및 신청 링크 위주로 보기 좋게 정리하고,
-                불필요한 문장은 생략해.
-                """
-                answer = ask_gpt(prompt)
-                print(f"\n📅 행사 정보\n{answer}\n")
-                continue
-            else:
-                print("챗봇: 현재 해당 주제의 행사 정보는 없습니다.\n")
-                continue
+def is_image_input(x):
+    """입력이 이미지인지 판별"""
+    if isinstance(x, Image.Image):
+        return True
+    if isinstance(x, str) and os.path.exists(x):
+        ext = os.path.splitext(x)[1].lower()
+        mime, _ = mimetypes.guess_type(x)
+        return (ext in IMG_EXTS) or ((mime or "").startswith("image/"))
+    return False
 
-        # 행사 외 질문
-        prompt = f"""
-        사용자가 '{user_input}'라고 물었어.
+def predict_place(image_path):
+    """이미지 → 건물 분류"""
+    try:
+        img = Image.open(image_path).convert("RGB")
+    except (FileNotFoundError, UnidentifiedImageError):
+        return "이미지 로드를 실패했습니다. 다시 업로드 해주세요."
+    x = transform(img).unsqueeze(0)
+    with torch.no_grad():
+        outputs = model(x)
+        pred_idx = outputs.argmax(dim=1).item()
+    return class_names[pred_idx]
 
-        1. 파주 출판단지 관련 질문이면:
-           - 장소의 핵심 요약만 2~3줄로 알려줘.
-           - 마지막에 '다른 정보에 대해 궁금하다면 추가로 질문해주세요'라고 유도 질문을 덧붙여.
 
-        2. 관련 없는 질문이면:
-           - "죄송하지만 저는 파주 출판단지 관련 정보만 안내할 수 있습니다." 라고만 출력.
-        """
-        answer = ask_gpt(prompt)
-        print(f"\n챗봇: {answer}\n")
+# 행사 RAG 
+def text_mode(user_text: str, session_id: str) -> str:
+    if any(k in user_text for k in ["행사", "이벤트"]):
+        results = retrieve_event_info(user_text, top_k=2)
+        if results:
+            context = "\n\n".join([r.page_content for r in results])
+            prompt = f"""
+사용자가 '{user_text}'라고 물었어.
+아래는 관련 행사 정보야:
+{context}
 
-        # 추가 대화 유도
-        follow_up = input("사용자: ").strip().lower()
-        if follow_up in ["응", "좋아요", "ㅇㅋ", "더 알려줘", "그래"]:
-            detail_prompt = f"'{user_input}'에 대해 자세히 안내문 형식으로 써줘."
-            detail_answer = ask_gpt(detail_prompt)
-            print(f"\n챗봇: {detail_answer}\n")
-        elif follow_up in ["아니", "괜찮아요", "그만"]:
-            print("챗봇: 알겠습니다. 다른 장소나 궁금한 점이 있나요?\n")
+제목, 일시, 장소, 주최, 요약, 신청방법을 보기 좋게 정리해줘.
+꼭 사용자가 보기 깔끔하게 출력해줘
+"""
+            return ask_gpt(prompt, session_id)
         else:
-            next_answer = ask_gpt(f"사용자가 '{follow_up}'라고 대답했어. 자연스럽게 대화를 이어가줘.")
-            print(f"\n챗봇: {next_answer}\n")
+            return "현재 해당 주제의 행사 정보는 없습니다."
+    else:
+        prompt = f"""
+사용자가 '{user_text}'라고 물었어.
+파주 출판단지 관련이면 2~3줄 요약 후,
+'다른 정보에 대해 궁금하다면 추가로 질문해주세요.'라고 유도 질문을 추가하면서 마무리.
+아니면 '죄송하지만 저는 파주 출판단지 관련 정보만 안내할 수 있습니다.'라고만 출력.
+"""
+        return ask_gpt(prompt, session_id)
 
 
 # 이미지 모드
-def image_mode():
-    while True:
-        image_path = input("이미지 파일 경로 입력 (종료하려면 quit): ").strip()
-        if image_path.lower() == "quit":
-            print("챗봇: 이미지 모드를 종료합니다.")
-            break
+def image_mode(image_path: str, session_id: str):
+    place_name = predict_place(image_path)
+    print(f"\n[예측된 장소] {place_name}")
+    print("원하시는 기능을 선택하세요:")
+    print("1. 스탬프 적립")
+    print("2. 장소 설명 보기")
 
-        if not os.path.exists(image_path):
-            print("⚠️ 파일이 존재하지 않습니다. 다시 입력해주세요.\n")
-            continue
+    choice = input("번호 입력 >> ").strip()
 
-        place_name = predict_place(image_path)
-        print(f"\n[모델 예측 장소] {place_name}\n")
+    # 스탬프 적립
+    if choice == "1":
+        if session_id not in user_stamps:
+            user_stamps[session_id] = []
 
+        if place_name not in user_stamps[session_id]:
+            user_stamps[session_id].append(place_name)
+            message = f"'{place_name}'의 스탬프가 적립되었습니다! 🎉"
+        else:
+            message = f"'{place_name}'은(는) 이미 적립된 장소입니다. 😉"
+
+        return {"answer": message, "label": place_name}
+
+    # 장소 설명
+    elif choice == "2":
         prompt = f"""
-        사용자가 '{place_name}' 사진을 보냈어.
-        이 장소가 파주 출판단지와 관련이 있다면:
-        - '{place_name}'의 핵심 특징을 2~3줄로 요약하고,
-        - 마지막에 '다른 정보에 대해 궁금하다면 추가로 질문해주세요'라고 유도 질문을 추가해.
-        관련이 없다면 "죄송하지만 저는 파주 출판단지 관련 정보만 안내할 수 있습니다."라고만 출력해.
-        """
-        answer = ask_gpt(prompt)
-        print(f"\n챗봇: {answer}\n")
+사용자가 '{place_name}' 사진을 보냈어.
+'{place_name}'이 파주 출판단지 관련이면 2~3줄로 요약하고,
+'다른 정보에 대해 궁금하다면 추가로 질문해주세요.'라고 유도 질문을 추가하면서 마무리.
+아니면 '죄송하지만 저는 파주 출판단지 관련 정보만 안내할 수 있습니다.'라고만 출력.
+"""
+        answer = ask_gpt(prompt, session_id)
+        return {"answer": answer, "label": place_name}
 
-        follow_up = input("사용자: ").strip().lower()
-        if follow_up in ["응", "좋아요", "ㅇㅋ", "더 알려줘", "그래"]:
-            detail_prompt = f"'{place_name}'에 대해 자세한 설명(분위기, 방문 포인트, 참고사항)을 안내문 형식으로 써줘."
-            detail_answer = ask_gpt(detail_prompt)
-            print(f"\n챗봇: {detail_answer}\n")
-        elif follow_up in ["아니", "괜찮아요", "그만"]:
-            print("챗봇: 알겠습니다. 다른 사진이나 궁금한 점이 있나요?\n")
-        else:
-            next_answer = ask_gpt(f"사용자가 '{follow_up}'라고 대답했어. 자연스럽게 대화를 이어가줘.")
-            print(f"\n챗봇: {next_answer}\n")
+    # 잘못된 입력 처리
+    else:
+        return {"answer": "잘못된 입력입니다. 1 또는 2를 선택해주세요.", "label": place_name}
 
 
-def chatbot_interface():
-    print("=== 파주 출판단지 안내 챗봇 ===")
-    print("안녕하세요, 파주 출판단지 챗봇입니다.")
-    print("텍스트 입력이나 이미지 업로드를 통해 원하시는 장소의 정보를 안내받을 수 있습니다.")
-    print("또한 출판단지에서 예정된 다양한 행사 일정도 함께 확인하실 수 있습니다.\n")
-    print("원하는 모드를 선택해주세요!\n")
 
-    first_run = True
+def infer_chat(x, session_id: str):
+    """
+    x: 텍스트(str) or 이미지 경로(str) or PIL.Image
+    session_id: 사용자별 고유 ID (예: user_id, 채팅방 id 등)
+    """
+    if is_image_input(x):
+        return image_mode(x, session_id)
+    else:
+        return {"answer": text_mode(str(x), session_id), "label": None}
 
-    while True:
-        if first_run:
-            print("1. 텍스트 질문 (행사 검색 포함)")
-            print("2. 이미지 업로드")
-            print("종료하려면 'quit' 입력\n")
-            first_run = False
 
-        mode = input(">> 모드 선택 (1=text, 2=image): ").strip()
-        if mode.lower() == "quit":
-            print("챗봇: 프로그램을 종료합니다.")
-            break
-        elif mode == "1":
-            text_mode()
-        elif mode == "2":
-            image_mode()
-        else:
-            print("⚠️ 잘못된 입력입니다. 1 또는 2를 선택해주세요.\n")
+# 인삿말 함수
+def get_greeting():
+    """앱 첫 실행 시 보여줄 인삿말"""
+    greeting = (
+        "안녕하세요, 파주 출판단지 챗봇 파랑이입니다.\n"
+        "텍스트 입력이나 이미지 업로드를 통해 원하시는 장소의 정보를 안내받을 수 있습니다.\n"
+        "또한 출판단지에서 예정된 다양한 행사 일정도 함께 확인하실 수 있습니다.\n"
+        "사진을 업로드를 통해 스탬프를 적립할 수도 있어요!"
+    )
+    return greeting
 
 
 if __name__ == "__main__":
-    chatbot_interface()
+    print(get_greeting(), "\n")
+    session = "user_001"
+    while True:
+        sample = input("입력 (quit 입력 시 종료) >> ").strip()
+        if sample.lower() == "quit":
+            break
+        result = infer_chat(sample, session)
+        print(f"\n{result['answer']}\n")
