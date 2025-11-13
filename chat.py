@@ -6,8 +6,6 @@ from dotenv import load_dotenv
 from retriever import retrieve_event_info
 
 load_dotenv()
-
-# GPT 키 불러오기
 client = AzureOpenAI(
     api_key=os.getenv("AZURE_OPENAI_KEY"),
     azure_endpoint=os.getenv("AZURE_OPENAI_ENDPOINT"),
@@ -120,54 +118,76 @@ def text_mode(user_text: str, session_id: str) -> str:
 
 
 # 이미지 모드
-def image_mode(image_path: str, session_id: str):
+def image_mode(image_path: str, session_id: str, user_text: str = None):
+    """
+    이미지를 분석하여 장소를 예측하고 설명을 제공합니다.
+    
+    Args:
+        image_path: 이미지 경로
+        session_id: 사용자 세션 ID
+        user_text: 사용자가 함께 입력한 텍스트 (선택사항)
+    """
     place_name = predict_place(image_path)
-    print(f"\n[예측된 장소] {place_name}")
-    print("원하시는 기능을 선택하세요:")
-    print("1. 스탬프 적립")
-    print("2. 장소 설명 보기")
-
-    choice = input("번호 입력 >> ").strip()
-
-    # 스탬프 적립
-    if choice == "1":
+    
+    # 사용자가 장소 확인을 원하는 경우 (텍스트가 있거나, 장소 확인 키워드가 포함된 경우)
+    place_inquiry_keywords = ["장소", "어디", "뭐야", "무엇", "이곳", "여기", "알려", "설명"]
+    wants_stamp = False
+    
+    if user_text:
+        user_text_lower = user_text.lower()
+        # 스탬프 관련 키워드가 있으면 스탬프 적립 의도로 판단
+        stamp_keywords = ["스탬프", "적립", "체크인"]
+        if any(kw in user_text_lower for kw in stamp_keywords):
+            wants_stamp = True
+        # 장소 확인 의도가 명확한 경우
+        elif any(kw in user_text_lower for kw in place_inquiry_keywords):
+            wants_stamp = False
+    else:
+        # 텍스트가 없으면 기본적으로 장소 설명 제공
+        wants_stamp = False
+    
+    # 장소 설명 생성
+    prompt = f"""
+사용자가 '{place_name}' 사진을 보냈어.
+"""
+    if user_text:
+        prompt += f"사용자가 '{user_text}'라고 물었어.\n"
+    
+    prompt += f"""
+'{place_name}'이 파주 출판단지 관련이면 2~3줄로 요약하고,
+'다른 정보에 대해 궁금하다면 추가로 질문해주세요.'라고 유도 질문을 추가하면서 마무리.
+아니면 '죄송하지만 저는 파주 출판단지 관련 정보만 안내할 수 있습니다.'라고만 출력.
+"""
+    answer = ask_gpt(prompt, session_id)
+    
+    # 스탬프 적립 처리
+    stamp_message = ""
+    if wants_stamp:
         if session_id not in user_stamps:
             user_stamps[session_id] = []
 
         if place_name not in user_stamps[session_id]:
             user_stamps[session_id].append(place_name)
-            message = f"'{place_name}'의 스탬프가 적립되었습니다! 🎉"
+            stamp_message = f"\n\n'{place_name}'의 스탬프가 적립되었습니다! 🎉"
         else:
-            message = f"'{place_name}'은(는) 이미 적립된 장소입니다. 😉"
-
-        return {"answer": message, "label": place_name}
-
-    # 장소 설명
-    elif choice == "2":
-        prompt = f"""
-사용자가 '{place_name}' 사진을 보냈어.
-'{place_name}'이 파주 출판단지 관련이면 2~3줄로 요약하고,
-'다른 정보에 대해 궁금하다면 추가로 질문해주세요.'라고 유도 질문을 추가하면서 마무리.
-아니면 '죄송하지만 저는 파주 출판단지 관련 정보만 안내할 수 있습니다.'라고만 출력.
-"""
-        answer = ask_gpt(prompt, session_id)
-        return {"answer": answer, "label": place_name}
-
-    # 잘못된 입력 처리
-    else:
-        return {"answer": "잘못된 입력입니다. 1 또는 2를 선택해주세요.", "label": place_name}
+            stamp_message = f"\n\n'{place_name}'은(는) 이미 적립된 장소입니다. 😉"
+    
+    return {"answer": answer + stamp_message, "label": place_name}
 
 
 
-def infer_chat(x, session_id: str):
+def infer_chat(x, session_id: str, user_text: str = None):
     """
     x: 텍스트(str) or 이미지 경로(str) or PIL.Image
     session_id: 사용자별 고유 ID (예: user_id, 채팅방 id 등)
+    user_text: 사용자가 입력한 텍스트 (이미지와 함께 전달된 경우)
     """
     if is_image_input(x):
-        return image_mode(x, session_id)
+        return image_mode(x, session_id, user_text)
     else:
-        return {"answer": text_mode(str(x), session_id), "label": None}
+        # 텍스트 입력에서 이미지 관련 질문이 있는지 확인
+        text = str(x) if user_text is None else user_text
+        return {"answer": text_mode(text, session_id), "label": None}
 
 
 # 인삿말 함수
@@ -176,8 +196,11 @@ def get_greeting():
     greeting = (
         "안녕하세요, 파주 출판단지 챗봇 파랑이입니다.\n"
         "텍스트 입력이나 이미지 업로드를 통해 원하시는 장소의 정보를 안내받을 수 있습니다.\n"
-        "또한 출판단지에서 예정된 다양한 행사 일정도 함께 확인하실 수 있습니다.\n"
-        "사진을 업로드를 통해 스탬프를 적립할 수도 있어요!"
+        "또한 출판단지에서 예정된 다양한 행사 일정도 함께 확인하실 수 있습니다.\n\n"
+        "사진 업로드 방법:\n"
+        "- 사진만 업로드: 장소 정보를 자동으로 안내해드립니다.\n"
+        "- 사진과 함께 질문: '이 장소가 뭐야?', '이곳은 어디인가요?' 등으로 질문하시면 더 자세한 정보를 제공합니다.\n"
+        "- 스탬프 적립: '스탬프 적립해줘', '체크인' 등과 함께 사진을 업로드하시면 스탬프가 적립됩니다."
     )
     return greeting
 
