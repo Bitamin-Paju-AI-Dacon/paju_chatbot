@@ -26,4 +26,4 @@ docker run -d \
   -v /home/azureuser/app/paju_model_resnet18_finetuned.pth:/app/paju_model_resnet18_finetuned.pth \
   $DOCKER_IMAGE
 
-echo "[5] 배포 완료!"
+echo "[5] 배포 완료"
