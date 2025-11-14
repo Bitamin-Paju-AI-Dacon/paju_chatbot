@@ -23,7 +23,7 @@ jobs:
         DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
         DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
 
-        # ★ 모든 Azure 설정을 하나에 넣은 Secret
+        # 모든 Azure 설정을 하나에 넣은 Secret
         AZURE_SETTINGS: ${{ secrets.AZURE_SETTINGS }}
 
       run: |
@@ -47,7 +47,8 @@ jobs:
           echo "=== Creating .env file ==="
           cat > /home/azureuser/app/.env <<EOT
         ${AZURE_SETTINGS}
-        EOT"
+        ${DB_SETTINGS}
+        EOT
 
           echo "=== Copying .env to docker/.env ==="
           cp /home/azureuser/app/.env /home/azureuser/app/docker/.env
