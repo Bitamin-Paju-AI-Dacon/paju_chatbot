@@ -1,21 +1,18 @@
 services:
   web:
     build:
-      context: ../..        # 프로젝트 루트
-      dockerfile: docker/Dockerfile
+      context: /home/azureuser/app           # 프로젝트 루트
+      dockerfile: docker/Dockerfile          # docker 폴더 안의 Dockerfile
     container_name: paju_web
     command: python manage.py runserver 0.0.0.0:8000
     volumes:
-      - ../../:/app
+      - /home/azureuser/app:/app
       - static_volume:/app/staticfiles
       - media_volume:/app/media
     ports:
       - "8000:8000"
     env_file:
-      - /home/azureuser/app/.env 
-    environment:
-      - DB_HOST=${DB_HOST:-host.docker.internal}   # 기본값 host.docker.internal
-      - DB_PORT=${DB_PORT:-3306}
+      - /home/azureuser/app/.env
 
 volumes:
   static_volume:
