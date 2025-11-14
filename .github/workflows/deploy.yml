@@ -11,6 +11,13 @@ jobs:
     steps:
     - uses: actions/checkout@v3
     
+    - name: Install Docker Compose
+      run: |
+        sudo curl -L "https://github.com/docker/compose/releases/download/1.29.2/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
+        sudo chmod +x /usr/local/bin/docker-compose
+        docker-compose --version
+
+
     - name: Deploy to server
       env:
         DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
@@ -34,8 +41,7 @@ jobs:
           ./ $DEPLOY_USER@$DEPLOY_HOST:/home/azureuser/app/
         
         ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no $DEPLOY_USER@$DEPLOY_HOST << 'EOF'
-          cd /home/azureuser/app
-          cd cicd/docker
+          cd /home/azureuser/app/docker
           docker-compose down
           docker-compose up -d --build
         EOF
