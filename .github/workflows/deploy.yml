@@ -7,7 +7,7 @@ on:
 jobs:
   deploy:
     runs-on: ubuntu-latest
-    
+
     steps:
     - uses: actions/checkout@v3
 
@@ -20,41 +20,33 @@ jobs:
         DB_SETTINGS: ${{ secrets.DB_SETTINGS }}
 
       run: |
-        set -xe   # 🔥 GitHub Actions 내부 명령 실패 시 즉시 어디서 죽었는지 출력
-
+        set -xe
+        
         mkdir -p ~/.ssh
         echo "$DEPLOY_SSH_KEY" > ~/.ssh/deploy_key
         chmod 600 ~/.ssh/deploy_key
         ssh-keyscan -H $DEPLOY_HOST >> ~/.ssh/known_hosts
 
-        ssh -vvv -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no $DEPLOY_USER@$DEPLOY_HOST << 'EOF'
-set -xe   # 🔥 SSH 내부 명령 어디서 죽는지 로그 표시
+        ssh -vvv -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no $DEPLOY_USER@$DEPLOY_HOST << EOF 
+        set -xe
 
-echo "[1] === Creating .env file ==="
-echo "---- AZURE_SETTINGS START ----"
-echo "${AZURE_SETTINGS}"    # 🔥 실제로 서버에서 어떻게 보이는지 출력
-echo "---- AZURE_SETTINGS END ----"
+        echo "[1] Creating .env using printf"
+        printf "%s\n%s\n" "${AZURE_SETTINGS}" "${DB_SETTINGS}" > /home/azureuser/app/.env
 
-cat > /home/azureuser/app/.env << 'EOT'
-${AZURE_SETTINGS}
-${DB_SETTINGS}
-EOT
+        echo "[2] Building Docker image"
+        cd /home/azureuser/app
+        docker build -t paju_web -f docker/Dockerfile .
 
-echo "[2] === Building Docker image ==="
-cd /home/azureuser/app
-docker build -t paju_web -f docker/Dockerfile .
+        echo "[3] Restarting container"
+        docker stop paju_web || true
+        docker rm paju_web || true
 
-echo "[3] === Restarting container ==="
-docker stop paju_web || true
-docker rm paju_web || true
-
-echo "[4] === Running container ==="
-docker run -d \
-  --name paju_web \
-  --env-file /home/azureuser/app/.env \
-  -p 8000:8000 \
-  -v /home/azureuser/app/media:/app/media \
-  -v /home/azureuser/app/staticfiles:/app/staticfiles \
-  paju_web
-
-EOF
+        echo "[4] Running container"
+        docker run -d \
+          --name paju_web \
+          --env-file /home/azureuser/app/.env \
+          -p 8000:8000 \
+          -v /home/azureuser/app/media:/app/media \
+          -v /home/azureuser/app/staticfiles:/app/staticfiles \
+          paju_web
+        EOF
