@@ -22,18 +22,39 @@ def get_conversation_history(session_id: str):
     return conversation_sessions[session_id]
 
 
+def format_messages(history):
+    formatted = []
+    for msg in history:
+        formatted.append({
+            "role": msg["role"],
+            "content": [
+                {
+                    "type": "text",
+                    "text": msg["content"]
+                }
+            ]
+        })
+    return formatted
+
+
 def ask_gpt(user_prompt: str, session_id: str) -> str:
-    """GPT에게 질문"""
     conversation_history = get_conversation_history(session_id)
+
     conversation_history.append({"role": "user", "content": user_prompt})
-    
+
+    # Azure용 메시지 포맷 변환
+    formatted_messages = format_messages(conversation_history)
+
     response = client.chat.completions.create(
         model=os.getenv("AZURE_OPENAI_DEPLOYMENT"),
-        messages=conversation_history
+        messages=formatted_messages
     )
-    
-    answer = response.choices[0].message.content
+
+    answer_blocks = response.choices[0].message.content
+    answer = "".join([b.text for b in answer_blocks if b.type == "text"])
+
     conversation_history.append({"role": "assistant", "content": answer})
+
     return answer
 
 
