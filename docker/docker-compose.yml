@@ -1,0 +1,26 @@
+version: '3.8'
+
+services:
+  web:
+    build:
+      context: ../..  # 프로젝트 루트 디렉토리
+      dockerfile: cicd/docker/Dockerfile
+    container_name: paju_web
+    command: python manage.py runserver 0.0.0.0:8000
+    volumes:
+      - ../../:/app  # 프로젝트 루트를 /app에 마운트
+      - static_volume:/app/staticfiles
+      - media_volume:/app/media
+    ports:
+      - "8000:8000"
+    env_file:
+      - ../../.env  # /home/azureuser/app/.env 파일 사용
+    environment:
+      # .env 파일에 없을 경우를 위한 기본값
+      - DB_HOST=${DB_HOST:-localhost}
+      - DB_PORT=${DB_PORT:-3306}
+
+volumes:
+  static_volume:
+  media_volume:
+

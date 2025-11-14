@@ -1,0 +1,43 @@
+name: Deploy
+
+on:
+  push:
+    branches: [ feat/api ]
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v3
+    
+    - name: Deploy to server
+      env:
+        DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+        DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+        DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+      run: |
+        mkdir -p ~/.ssh
+        echo "$DEPLOY_SSH_KEY" > ~/.ssh/deploy_key
+        chmod 600 ~/.ssh/deploy_key
+        ssh-keyscan -H $DEPLOY_HOST >> ~/.ssh/known_hosts
+        
+        rsync -avz --delete \
+          -e "ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no" \
+          --exclude '.git' \
+          --exclude '.venv' \
+          --exclude '__pycache__' \
+          --exclude '*.pyc' \
+          --exclude '.env' \
+          --exclude 'media' \
+          --exclude 'staticfiles' \
+          ./ $DEPLOY_USER@$DEPLOY_HOST:/home/azureuser/app/
+        
+        ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no $DEPLOY_USER@$DEPLOY_HOST << 'EOF'
+          cd /home/azureuser/app
+          cd cicd/docker
+          docker-compose down
+          docker-compose up -d --build
+        EOF
+

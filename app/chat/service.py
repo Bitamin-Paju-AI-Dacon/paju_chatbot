@@ -39,6 +39,9 @@ def ask_gpt(user_prompt: str, session_id: str) -> str:
 
 def predict_place(image_bytes: bytes):
     """이미지에서 장소 예측"""
+    import logging
+    logger = logging.getLogger(__name__)
+    
     img = Image.open(io.BytesIO(image_bytes)).convert("RGB")
     input_tensor = transform(img).unsqueeze(0)
     
@@ -47,6 +50,14 @@ def predict_place(image_bytes: bytes):
         probabilities = torch.nn.functional.softmax(outputs, dim=1)
         pred_idx = outputs.argmax(dim=1).item()
         confidence = probabilities[0][pred_idx].item()
+        
+        # 디버깅: 모든 클래스의 확률 출력
+        probs_list = probabilities[0].tolist()
+        logger.info(f"예측 인덱스: {pred_idx}, 예측 클래스: {class_names[pred_idx]}, 신뢰도: {confidence:.4f}")
+        logger.info(f"상위 3개 예측:")
+        top3_indices = torch.topk(probabilities[0], 3).indices.tolist()
+        for idx in top3_indices:
+            logger.info(f"  - {class_names[idx]}: {probabilities[0][idx].item():.4f}")
     
     return class_names[pred_idx], confidence
 

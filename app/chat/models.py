@@ -4,6 +4,7 @@
 import os
 import json
 import torch
+from pathlib import Path
 from torchvision import models as torch_models, transforms
 from PIL import Image
 from openai import AzureOpenAI
@@ -25,19 +26,63 @@ client = AzureOpenAI(
 )
 
 # 이미지 분류 모델 설정
-with open("config.json", "r", encoding="utf-8") as f:
-    cfg = json.load(f)
+import logging
+logger = logging.getLogger(__name__)
 
-num_classes = cfg["num_classes"]
-model_path = cfg["model_path"]
-class_names = cfg["class_names"]
+# config.json 경로를 BASE_DIR 기준으로 설정
+BASE_DIR = Path(__file__).resolve().parent.parent.parent
+config_path = BASE_DIR / "config.json"
 
-# ResNet18 모델 로드
-model = torch_models.resnet18(weights=torch_models.ResNet18_Weights.DEFAULT)
-model.fc = torch.nn.Linear(model.fc.in_features, num_classes)
-model.load_state_dict(torch.load(model_path, map_location='cpu'))
-model.to('cpu')
-model.eval()
+try:
+    with open(config_path, "r", encoding="utf-8") as f:
+        cfg = json.load(f)
+    
+    num_classes = cfg["num_classes"]
+    model_path = BASE_DIR / cfg["model_path"]
+    class_names = cfg["class_names"]
+    
+    logger.info(f"모델 파일 경로: {model_path}")
+    logger.info(f"클래스 개수: {num_classes}")
+    logger.info(f"클래스 목록: {class_names}")
+    
+    # ResNet18 모델 로드
+    model = torch_models.resnet18(weights=torch_models.ResNet18_Weights.DEFAULT)
+    model.fc = torch.nn.Linear(model.fc.in_features, num_classes)
+    
+    # 모델 파일 존재 확인
+    if not model_path.exists():
+        raise FileNotFoundError(f"모델 파일을 찾을 수 없습니다: {model_path}")
+    
+    # 모델 가중치 로드
+    state_dict = torch.load(model_path, map_location='cpu')
+    model.load_state_dict(state_dict)
+    model.to('cpu')
+    model.eval()
+    
+    logger.info("모델이 성공적으로 로드되었습니다.")
+except Exception as e:
+    logger.error(f"모델 로드 중 오류 발생: {str(e)}")
+    # 기본값으로 설정 (에러 방지)
+    num_classes = 11
+    class_names = [
+        "파주출판도시 Sbg파주사옥", 
+        "milkbook",
+        "김영사 사서점",
+        "문학동네",
+        "출판단지 북카페눈",
+        "열화당",
+        "출판단지 은하수 출판사", 
+        "출판단지 음악세계", 
+        "출판단지 지혜의숲",
+        "출판단지 어린이집",
+        "파인드아웃"
+    ]
+    # 기본 모델로 초기화 (가중치 없이)
+    model = torch_models.resnet18(weights=torch_models.ResNet18_Weights.DEFAULT)
+    model.fc = torch.nn.Linear(model.fc.in_features, num_classes)
+    model.to('cpu')
+    model.eval()
+    logger.warning("기본 모델로 초기화되었습니다. 모델 파일을 확인해주세요.")
 
 # 이미지 전처리
 mean = [0.485, 0.456, 0.406]
