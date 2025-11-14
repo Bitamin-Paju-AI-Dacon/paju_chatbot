@@ -17,7 +17,6 @@ jobs:
         sudo chmod +x /usr/local/bin/docker-compose
         docker-compose --version
 
-
     - name: Deploy to server
       env:
         DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
@@ -35,14 +34,16 @@ jobs:
           --exclude '.venv' \
           --exclude '__pycache__' \
           --exclude '*.pyc' \
-          --exclude '.env' \
           --exclude 'media' \
           --exclude 'staticfiles' \
           ./ $DEPLOY_USER@$DEPLOY_HOST:/home/azureuser/app/
         
         ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no $DEPLOY_USER@$DEPLOY_HOST << 'EOF'
+          echo ".env 파일 복사"
+          cp /home/azureuser/app/.env /home/azureuser/app/docker/.env || echo ".env 파일 없음 (건너뜀)"
+
+          echo "Docker Compose 재시작"
           cd /home/azureuser/app/docker
           docker-compose down
           docker-compose up -d --build
         EOF
-
