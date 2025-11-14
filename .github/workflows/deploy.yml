@@ -16,10 +16,8 @@ jobs:
         DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
         DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
         DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
-
         AZURE_SETTINGS: ${{ secrets.AZURE_SETTINGS }}
         DB_SETTINGS: ${{ secrets.DB_SETTINGS }}
-
       run: |
         mkdir -p ~/.ssh
         echo "$DEPLOY_SSH_KEY" > ~/.ssh/deploy_key
@@ -37,13 +35,13 @@ jobs:
           --exclude 'staticfiles' \
           ./ $DEPLOY_USER@$DEPLOY_HOST:/home/azureuser/app/
 
-
-        ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no $DEPLOY_USER@$DEPLOY_HOST << EOF
+        # 서버 실행
+        ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no $DEPLOY_USER@$DEPLOY_HOST << 'EOF'
           echo "=== Creating .env file ==="
           cat > /home/azureuser/app/.env <<EOT
-        ${AZURE_SETTINGS}
-        ${DB_SETTINGS}
-        EOT
+          ${AZURE_SETTINGS}
+          ${DB_SETTINGS}
+          EOT
 
           echo "=== Building Docker image ==="
           cd /home/azureuser/app
@@ -60,4 +58,4 @@ jobs:
             -v /home/azureuser/app/media:/app/media \
             -v /home/azureuser/app/staticfiles:/app/staticfiles \
             paju_web
-          EOF
+        EOF
