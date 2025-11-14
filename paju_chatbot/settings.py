@@ -30,12 +30,15 @@ INSTALLED_APPS = [
     'corsheaders',
     'app.auth.apps.AuthConfig',
     'app.chat.apps.ChatConfig',
+    'corsheaders',
 ]
 
 # 커스텀 유저 모델
 AUTH_USER_MODEL = 'app_auth.User'  # label이 'app_auth'이므로
 
 MIDDLEWARE = [
+    'corsheaders.middleware.CorsMiddleware',
+    'django.middleware.common.CommonMiddleware',
     'django.middleware.security.SecurityMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'corsheaders.middleware.CorsMiddleware',
@@ -134,6 +137,8 @@ CORS_ALLOWED_ORIGINS = [
     "http://localhost:8000",
     "http://127.0.0.1:3000",
     "http://127.0.0.1:8000",
+    "https://pajufe.vercel.app",
+    "https://parangee.store",
 ]
 
 CORS_ALLOW_ALL_ORIGINS = True
