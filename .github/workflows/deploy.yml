@@ -1,4 +1,5 @@
 name: Deploy
+
 on:
   push:
     branches: [ feat/api ]
@@ -9,9 +10,10 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-    - uses: actions/checkout@v3
+    - name: Checkout Repository
+      uses: actions/checkout@v3
 
-    - name: Deploy to server
+    - name: Deploy to Azure VM
       env:
         DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
         DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
@@ -21,32 +23,45 @@ jobs:
 
       run: |
         set -xe
-        
+
+        echo "=== SSH 준비 ==="
         mkdir -p ~/.ssh
         echo "$DEPLOY_SSH_KEY" > ~/.ssh/deploy_key
         chmod 600 ~/.ssh/deploy_key
-        ssh-keyscan -H $DEPLOY_HOST >> ~/.ssh/known_hosts
+        ssh-keyscan -H $DEPLOY_HOST >> ~/.ssh/known_hosts || true
 
-        ssh -vvv -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no $DEPLOY_USER@$DEPLOY_HOST << EOF 
-        set -xe
+        echo "=== rsync로 코드 동기화 ==="
+        rsync -avz --delete \
+          -e "ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no" \
+          --exclude '.git' \
+          --exclude '.venv' \
+          --exclude '__pycache__' \
+          --exclude '*.pyc' \
+          ./ $DEPLOY_USER@$DEPLOY_HOST:/home/azureuser/app/
 
-        echo "[1] Creating .env using printf"
-        printf "%s\n%s\n" "${AZURE_SETTINGS}" "${DB_SETTINGS}" > /home/azureuser/app/.env
+        echo "=== 서버에서 Docker build 및 실행 ==="
+        ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no $DEPLOY_USER@$DEPLOY_HOST << 'EOF'
+          set -xe
 
-        echo "[2] Building Docker image"
-        cd /home/azureuser/app
-        docker build -t paju_web -f docker/Dockerfile .
+          echo "[1] .env 생성"
+          printf "%s\n%s\n" "${AZURE_SETTINGS}" "${DB_SETTINGS}" > /home/azureuser/app/.env
 
-        echo "[3] Restarting container"
-        docker stop paju_web || true
-        docker rm paju_web || true
+          echo "[2] Docker 이미지 빌드 시작"
+          cd /home/azureuser/app
+          docker build -t paju_web -f docker/Dockerfile .
 
-        echo "[4] Running container"
-        docker run -d \
-          --name paju_web \
-          --env-file /home/azureuser/app/.env \
-          -p 8000:8000 \
-          -v /home/azureuser/app/media:/app/media \
-          -v /home/azureuser/app/staticfiles:/app/staticfiles \
-          paju_web
+          echo "[3] 기존 컨테이너 종료"
+          docker stop paju_web || true
+          docker rm paju_web || true
+
+          echo "[4] 새로운 컨테이너 실행"
+          docker run -d \
+            --name paju_web \
+            --env-file /home/azureuser/app/.env \
+            -p 8000:8000 \
+            -v /home/azureuser/app/media:/app/media \
+            -v /home/azureuser/app/staticfiles:/app/staticfiles \
+            paju_web
+
+          echo "[5] 배포 완료!"
         EOF
