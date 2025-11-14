@@ -3,6 +3,9 @@ set -xe
 
 DOCKER_IMAGE=$1
 
+echo "app 폴더 생성 확인"
+mkdir -p /home/azureuser/app
+
 echo "[1] .env 파일 생성"
 printf "%s\n%s\n" "$ENV_AZURE" "$ENV_DB" > /home/azureuser/app/.env
 
