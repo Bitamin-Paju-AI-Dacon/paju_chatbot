@@ -6,11 +6,15 @@ from dotenv import load_dotenv
 from retriever import retrieve_event_info
 
 load_dotenv()
-client = AzureOpenAI(
-    api_key=os.getenv("AZURE_OPENAI_KEY"),
-    azure_endpoint=os.getenv("AZURE_OPENAI_ENDPOINT"),
-    api_version=os.getenv("AZURE_OPENAI_API_VERSION")
-)
+
+def get_client():
+    """매 요청마다 환경변수 기반으로 AzureOpenAI 클라이언트를 생성"""
+    return AzureOpenAI(
+        api_key=os.getenv("AZURE_OPENAI_KEY"),
+        azure_endpoint=os.getenv("AZURE_OPENAI_ENDPOINT"),
+        api_version=os.getenv("AZURE_OPENAI_API_VERSION")
+    )
+
 
 # 이미지 분류 모델 설정 불러오기
 with open("config.json", "r", encoding="utf-8") as f:
@@ -49,6 +53,7 @@ user_stamps = {}
 
 # GPT 대화 기능
 def ask_gpt(user_prompt: str, session_id: str):
+    client = get_client()
     if session_id not in conversation_sessions:
         conversation_sessions[session_id] = [{"role": "system", "content": SYSTEM_PROMPT}]
 
