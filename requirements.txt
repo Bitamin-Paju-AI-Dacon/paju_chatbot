@@ -13,4 +13,3 @@ django-cors-headers>=4.0.0
 pymysql
 passlib[bcrypt]
 python-jose[cryptography]
-django-cors-headers

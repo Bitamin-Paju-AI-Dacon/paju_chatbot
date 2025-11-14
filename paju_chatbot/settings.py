@@ -30,15 +30,12 @@ INSTALLED_APPS = [
     'corsheaders',
     'app.auth.apps.AuthConfig',
     'app.chat.apps.ChatConfig',
-    'corsheaders',
 ]
 
 # 커스텀 유저 모델
 AUTH_USER_MODEL = 'app_auth.User'  # label이 'app_auth'이므로
 
 MIDDLEWARE = [
-    'corsheaders.middleware.CorsMiddleware',
-    'django.middleware.common.CommonMiddleware',
     'django.middleware.security.SecurityMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'corsheaders.middleware.CorsMiddleware',
