@@ -2,7 +2,7 @@ services:
   web:
     build:
       context: ../..  # 프로젝트 루트 디렉토리
-      dockerfile: cicd/docker/Dockerfile
+      dockerfile: docker/Dockerfile
     container_name: paju_web
     command: python manage.py runserver 0.0.0.0:8000
     volumes:

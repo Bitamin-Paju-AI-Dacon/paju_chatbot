@@ -10,7 +10,7 @@ jobs:
     
     steps:
     - uses: actions/checkout@v3
-    
+
     - name: Install Docker Compose
       run: |
         sudo curl -L "https://github.com/docker/compose/releases/download/1.29.2/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
@@ -22,12 +22,17 @@ jobs:
         DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
         DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
         DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+
+        # ★ 모든 Azure 설정을 하나에 넣은 Secret
+        AZURE_SETTINGS: ${{ secrets.AZURE_SETTINGS }}
+
       run: |
         mkdir -p ~/.ssh
         echo "$DEPLOY_SSH_KEY" > ~/.ssh/deploy_key
         chmod 600 ~/.ssh/deploy_key
         ssh-keyscan -H $DEPLOY_HOST >> ~/.ssh/known_hosts
         
+        # 코드 동기화
         rsync -avz --delete \
           -e "ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no" \
           --exclude '.git' \
@@ -37,12 +42,17 @@ jobs:
           --exclude 'media' \
           --exclude 'staticfiles' \
           ./ $DEPLOY_USER@$DEPLOY_HOST:/home/azureuser/app/
-        
-        ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no $DEPLOY_USER@$DEPLOY_HOST << 'EOF'
-          echo ".env 파일 복사"
-          cp /home/azureuser/app/.env /home/azureuser/app/docker/.env || echo ".env 파일 없음 (건너뜀)"
 
-          echo "Docker Compose 재시작"
+        ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no $DEPLOY_USER@$DEPLOY_HOST << 'EOF'
+          echo "=== Creating .env file ==="
+          cat > /home/azureuser/app/.env <<EOT
+        ${AZURE_SETTINGS}
+        EOT"
+
+          echo "=== Copying .env to docker/.env ==="
+          cp /home/azureuser/app/.env /home/azureuser/app/docker/.env
+
+          echo "=== Restarting docker-compose ==="
           cd /home/azureuser/app/docker
           docker-compose down
           docker-compose up -d --build
