@@ -39,10 +39,8 @@ def format_messages(history):
 
 def ask_gpt(user_prompt: str, session_id: str) -> str:
     conversation_history = get_conversation_history(session_id)
-
     conversation_history.append({"role": "user", "content": user_prompt})
 
-    # Azure용 메시지 포맷 변환
     formatted_messages = format_messages(conversation_history)
 
     response = client.chat.completions.create(
@@ -50,11 +48,15 @@ def ask_gpt(user_prompt: str, session_id: str) -> str:
         messages=formatted_messages
     )
 
-    answer_blocks = response.choices[0].message.content
-    answer = "".join([b.text for b in answer_blocks if b.type == "text"])
+    raw_content = response.choices[0].message.content
 
+    if isinstance(raw_content, str):
+        answer = raw_content
+    elif isinstance(raw_content, list):
+        answer = "".join([block.text for block in raw_content if block.type == "text"])
+    else:
+        answer = str(raw_content)
     conversation_history.append({"role": "assistant", "content": answer})
-
     return answer
 
 
