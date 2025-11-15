@@ -16,9 +16,12 @@ jobs:
         echo "${{ secrets.DOCKER_PASSWORD }}" | docker login -u "${{ secrets.DOCKER_USERNAME }}" --password-stdin
 
     - name: Build & Push
+      id: build
       run: |
-        docker build -t ${{ secrets.DOCKER_USERNAME }}/paju_web:latest .
-        docker push ${{ secrets.DOCKER_USERNAME }}/paju_web:latest
+        TAG=${{ github.sha }}
+        docker build -t ${{ secrets.DOCKER_USERNAME }}/paju_web:$TAG .
+        docker push ${{ secrets.DOCKER_USERNAME }}/paju_web:$TAG
+        echo "tag=$TAG" >> $GITHUB_OUTPUT
 
     - name: Deploy to Server
       env:
@@ -27,7 +30,6 @@ jobs:
         DEPLOY_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
         ENV_AZURE: ${{ secrets.AZURE_SETTINGS }}
         ENV_DB: ${{ secrets.DB_SETTINGS }}
-        DOCKER_IMAGE: ${{ secrets.DOCKER_USERNAME }}/paju_web:latest
 
       run: |
         mkdir -p ~/.ssh
@@ -35,9 +37,7 @@ jobs:
         chmod 600 ~/.ssh/key
         ssh-keyscan -H $DEPLOY_HOST >> ~/.ssh/known_hosts
 
-        # deploy.sh 서버로 전송
         scp -i ~/.ssh/key deploy.sh $DEPLOY_USER@$DEPLOY_HOST:/home/azureuser/deploy.sh
 
-        # 서버에서 실행
         ssh -i ~/.ssh/key $DEPLOY_USER@$DEPLOY_HOST \
-          "ENV_AZURE='$ENV_AZURE' ENV_DB='$ENV_DB' bash /home/azureuser/deploy.sh $DOCKER_IMAGE"
+          "ENV_AZURE='$ENV_AZURE' ENV_DB='$ENV_DB' bash /home/azureuser/deploy.sh ${{ secrets.DOCKER_USERNAME }}/paju_web:${{ steps.build.outputs.tag }}"
