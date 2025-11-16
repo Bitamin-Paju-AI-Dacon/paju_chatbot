@@ -150,6 +150,7 @@ LOGGING = {
         },
         "console": {
             "class": "logging.StreamHandler",
+            "level": "INFO",
         }
     },
     "loggers": {
@@ -157,6 +158,11 @@ LOGGING = {
             "handlers": ["file", "console"],
             "level": "ERROR",
             "propagate": True,
+        },
+        "app.chat.models": {
+            "handlers": ["console"],
+            "level": "INFO",
+            "propagate": False,
         },
     },
 }

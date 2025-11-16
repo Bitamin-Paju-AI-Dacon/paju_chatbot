@@ -27,13 +27,14 @@ client = AzureOpenAI(
 
 # 이미지 분류 모델 설정
 import logging
-logger = logging.getLogger(__name__)
+logger = logging.getLogger("app.chat.models")
 
 # config.json 경로를 BASE_DIR 기준으로 설정
 BASE_DIR = Path(__file__).resolve().parent.parent.parent
 config_path = BASE_DIR / "config.json"
 
 try:
+    logger.info(f"config.json 경로: {config_path}")
     with open(config_path, "r", encoding="utf-8") as f:
         cfg = json.load(f)
     
@@ -42,26 +43,34 @@ try:
     class_names = cfg["class_names"]
     
     logger.info(f"모델 파일 경로: {model_path}")
+    logger.info(f"모델 파일 존재 여부: {model_path.exists()}")
     logger.info(f"클래스 개수: {num_classes}")
     logger.info(f"클래스 목록: {class_names}")
     
+    # 모델 파일 존재 확인
+    if not model_path.exists():
+        error_msg = f"모델 파일을 찾을 수 없습니다: {model_path}"
+        logger.error(error_msg)
+        raise FileNotFoundError(error_msg)
+    
     # ResNet18 모델 로드
+    logger.info("ResNet18 모델 구조 생성 중...")
     model = torch_models.resnet18(weights=torch_models.ResNet18_Weights.DEFAULT)
     model.fc = torch.nn.Linear(model.fc.in_features, num_classes)
     
-    # 모델 파일 존재 확인
-    if not model_path.exists():
-        raise FileNotFoundError(f"모델 파일을 찾을 수 없습니다: {model_path}")
-    
     # 모델 가중치 로드
+    logger.info(f"모델 가중치 로드 중: {model_path}")
     state_dict = torch.load(model_path, map_location='cpu')
     model.load_state_dict(state_dict)
     model.to('cpu')
     model.eval()
     
     logger.info("모델이 성공적으로 로드되었습니다.")
+except FileNotFoundError as e:
+    logger.error(f"모델 파일을 찾을 수 없습니다: {str(e)}")
+    raise
 except Exception as e:
-    logger.error(f"모델 로드 중 오류 발생: {str(e)}")
+    logger.error(f"모델 로드 중 오류 발생: {str(e)}", exc_info=True)
     # 기본값으로 설정 (에러 방지)
     num_classes = 11
     class_names = [
