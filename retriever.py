@@ -12,7 +12,6 @@ def retrieve_event_info(query: str, top_k: int = 2):
         api_version=os.getenv("AZURE_EMBED_API_VERSION"),
         azure_deployment=os.getenv("AZURE_EMBED_DEPLOYMENT")
     )
-
     db = Chroma(
         persist_directory="./paju_db",
         embedding_function=embeddings
