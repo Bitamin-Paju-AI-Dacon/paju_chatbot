@@ -69,3 +69,5 @@ htmlcov/
 dist/
 build/
 *.egg-info/
+
+./app/chat/paju_model_resnet18_finetuned2.pth
