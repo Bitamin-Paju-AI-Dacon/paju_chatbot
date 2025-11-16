@@ -19,6 +19,7 @@ __pycache__/
 .Python
 
 # Model files (용량 큰 파일)
+*.pth
 paju_model_resnet18_finetuned.pth
 
 # DB / 캐시
@@ -69,5 +70,3 @@ htmlcov/
 dist/
 build/
 *.egg-info/
-
-./app/chat/paju_model_resnet18_finetuned2.pth
