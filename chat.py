@@ -29,9 +29,6 @@ model = models.resnet18(weights=models.ResNet18_Weights.DEFAULT)
 model.fc = torch.nn.Linear(model.fc.in_features, num_classes)
 
 
-model.load_state_dict(torch.load("paju_model_resnet18_finetuned.pth", map_location='cpu'))
-model.to('cpu')
-model.eval()
 
 mean = [0.485, 0.456, 0.406]
 std  = [0.229, 0.224, 0.225]
