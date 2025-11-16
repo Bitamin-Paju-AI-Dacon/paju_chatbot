@@ -67,12 +67,21 @@ docker logs paju_web 2>&1 | grep -i -E "(모델|model|config\.json|파일|file|�
 echo ""
 echo "=== Python에서 모델 직접 테스트 ==="
 docker exec paju_web python -c "
-import sys
-sys.path.insert(0, '/app')
+import os
+import django
+os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'paju_chatbot.settings')
+django.setup()
+
 from app.chat import models
-print('모델 로드 완료')
-print(f'모델 타입: {type(models.model)}')
-print(f'모델 상태: {models.model.training}')
+print('✓ 모델 로드 완료')
+print(f'✓ 모델 타입: {type(models.model)}')
+print(f'✓ 모델 상태: {models.model.training}')
+print(f'✓ 클래스 개수: {models.num_classes}')
+print(f'✓ 클래스 목록: {models.class_names[:3]}...')
 " 2>&1 || echo "모델 테스트 실패"
+
+echo ""
+echo "=== Django 서버 상태 확인 ==="
+docker exec paju_web ps aux | grep -E "(python|manage.py)" || echo "서버 프로세스 확인 실패"
 
 echo "[10] 배포 완료"
