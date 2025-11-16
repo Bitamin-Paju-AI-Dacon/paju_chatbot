@@ -1,6 +1,6 @@
 {
   "num_classes": 11,
-  "model_path": "paju_model_resnet18_finetuned.pth",
+  "model_path": "paju_model_resnet18_finetuned2.pth",
   "class_names": [
     "파주출판도시 Sbg파주사옥", 
     "milkbook",

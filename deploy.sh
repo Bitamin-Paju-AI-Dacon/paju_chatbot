@@ -23,7 +23,7 @@ docker run -d \
   -p 8000:8000 \
   -v /home/azureuser/app/media:/app/media \
   -v /home/azureuser/app/staticfiles:/app/staticfiles \
-  -v /home/azureuser/app/paju_model_resnet18_finetuned.pth:/app/paju_model_resnet18_finetuned.pth \
+  -v /home/azureuser/app/paju_model_resnet18_finetuned2.pth:/app/paju_model_resnet18_finetuned2.pth \
   $DOCKER_IMAGE
 
 echo "[5] 배포 완료"
