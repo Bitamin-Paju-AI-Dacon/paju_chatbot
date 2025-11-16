@@ -1,6 +1,7 @@
 #!/bin/bash
 set -xe
 
+
 DOCKER_IMAGE=$1
 
 echo "app 폴더 생성 확인"
