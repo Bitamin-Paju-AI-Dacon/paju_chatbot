@@ -2,7 +2,7 @@
 
 이미지로 장소를 인식하고, 행사 정보를 RAG로 검색해 안내하는 파주 출판단지 전용 AI 챗봇
 https://dacon.io/competitions/official/236612/overview/description
- 장려상 수상
+ 🏆 장려상 수상
 
 ### 1. 주요 기능
 
